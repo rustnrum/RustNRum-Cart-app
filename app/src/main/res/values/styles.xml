@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.RustNRumCart" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/rnr_primary</item>
+        <item name="android:statusBarColor">@color/rnr_background</item>
+        <item name="android:navigationBarColor">@color/rnr_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>

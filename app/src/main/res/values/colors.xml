@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="rnr_primary">#00E5D4</color>
+    <color name="rnr_primary_dim">#008F8A</color>
+    <color name="rnr_warning">#FF9800</color>
+    <color name="rnr_success">#22CE72</color>
+    <color name="rnr_danger">#FF4E55</color>
+    <color name="rnr_text">#F6F7F8</color>
+    <color name="rnr_muted">#A7B5BE</color>
+    <color name="rnr_background">#080E12</color>
+    <color name="rnr_surface">#1A1F24</color>
+    <color name="rnr_surface_alt">#111C25</color>
+    <color name="rnr_stroke">#34505B</color>
+</resources>

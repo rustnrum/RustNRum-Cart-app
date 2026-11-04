@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#080e12">
+<title>Rust N Rum Cart</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app-shell">
+  <main>
+    <!-- Drive: deliberately brief and readable while moving. -->
+    <section class="page active" data-page="drive">
+      <header class="brand-hero">
+        <img src="img/rnr_brand_header.png" alt="Rust N Rum Cart" class="brand-logo">
+      </header>
+      <div class="connection-row">
+        <button id="connectBtn" class="connect-pill disconnected" type="button">
+          <span class="connection-dot"></span>
+          <span id="connectText">CONNECT TO ALLTRAX</span>
+        </button>
+        <span id="modelText" class="device-model">SR48400 · USB HID</span>
+      </div>
+      <div id="connectionDetail" class="connection-detail">No controller connected. Connect the USB-C OTG cable.</div>
+
+      <section class="speed-panel" aria-label="GPS speedometer">
+        <div class="speed-dial">
+          <svg viewBox="0 0 340 216" class="speed-arc" aria-hidden="true">
+            <defs><linearGradient id="speedGlow" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0%" stop-color="#008f8a"/><stop offset="60%" stop-color="#00e5d4"/>
+              <stop offset="100%" stop-color="#73fff2"/></linearGradient></defs>
+            <path d="M 34 193 A 136 136 0 0 1 306 193" fill="none" stroke="#24373c" stroke-width="12" stroke-linecap="round"/>
+            <path id="speedFill" d="M 34 193 A 136 136 0 0 1 306 193" fill="none" stroke="url(#speedGlow)" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 427"/>
+            <g stroke="#759398" stroke-width="2" opacity="0.75"><path d="M34 199v-12"/><path d="M79 87l10 9"/><path d="M165 57v12"/><path d="M250 87l-10 9"/><path d="M306 199v-12"/></g>
+          </svg>
+          <div class="speed-center"><span class="speed-label">GPS SPEED</span>
+            <strong id="speedValue">—</strong><span class="speed-unit">MPH</span></div>
+          <span class="dial-min">0</span><span class="dial-max">40+</span>
+        </div>
+        <button type="button" class="gps-activation" id="gpsBtn">◉ Enable phone GPS</button>
+        <div class="speed-caption" id="gpsStatus">Speed comes from Android GPS, not the Alltrax controller.</div>
+      </section>
+
+      <div class="primary-metrics">
+        <div class="stat-card glow-teal"><div class="stat-title"><img src="img/ic_battery.png" alt="">BATTERY VOLTAGE</div>
+          <div><strong id="batteryValue">—</strong><span>V</span></div>
+          <small>48V battery pack · live</small></div>
+        <div class="stat-card glow-amber"><div class="stat-title"><img src="img/ic_current.png" alt="">MOTOR CURRENT</div>
+          <div><strong id="ampsValue">—</strong><span>A</span></div>
+          <small>Motor output, not battery draw</small></div>
+      </div>
+      <div class="throttle-widget">
+        <div class="throttle-top"><span>◩ THROTTLE POSITION</span><strong id="throttleValue">—</strong></div>
+        <div class="throttle-track"><div id="throttleProgress" class="throttle-fill"></div></div>
+        <div class="throttle-foot">Controller-reported position · percentage estimated</div>
+      </div>
+      <div class="drive-footer">
+        <span><img src="img/ic_temperature.png" alt=""> Controller <b id="driveTemp">—</b></span>
+        <button type="button" class="fault-shortcut" id="faultQuick">⚠ <b id="faultCount">—</b> faults</button>
+      </div>
+      <div class="safety-note">Live values are for information only. Never adjust controller settings while driving.</div>
+    </section>
+
+    <!-- Trips and battery health based on actual measurements. -->
+    <section class="page" data-page="trips">
+      <header class="page-title"><span>▥</span><h1>Trips &amp; Battery</h1></header>
+      <div class="segment-control" data-segment="trip"><button class="current" data-sub="currentTrip">Trip</button><button data-sub="history">History</button><button data-sub="battery">Battery</button></div>
+      <div class="sub-panel active" data-subpanel="currentTrip">
+        <div class="panel"><div class="panel-heading"><h2>Current Trip</h2><span class="tag" id="tripStatus">NOT RECORDING</span></div>
+          <div class="trip-grid"><div>Distance <b id="tripDistance">—</b></div><div>Live GPS <b id="tripSpeed">—</b></div>
+            <div>Starting voltage <b id="tripStart">—</b></div><div>Current voltage <b id="tripNow">—</b></div>
+          </div><div class="actions"><button class="btn primary" id="startTripBtn">▶ Start Recording</button><button class="btn outline" id="finishTripBtn" disabled>■ Finish Trip</button></div>
+        </div>
+        <div class="panel"><div class="panel-heading"><h2>What we're recording</h2><span class="subdued">Every ~2 seconds</span></div>
+          <p class="muted">Pack voltage, motor current, throttle, controller temperatures, all readable sensor fields, fault flags, GPS speed and distance. Sessions save to the phone even if the app is reopened.</p>
+        </div>
+      </div>
+      <div class="sub-panel" data-subpanel="history">
+        <div class="panel"><div class="panel-heading"><h2>Recorded Sessions</h2><button class="btn tiny" id="refreshTrips">Refresh</button></div>
+          <div id="tripHistory" class="history-list">No saved trips yet.</div></div>
+        <div class="panel"><h2>Trip Voltage &amp; Motor Current</h2><canvas id="tripChart" width="600" height="320" aria-label="Trip voltage history"></canvas>
+          <p class="muted" id="chartNote">Select a recorded trip to show its measured voltage trace.</p>
+        </div>
+      </div>
+      <div class="sub-panel" data-subpanel="battery">
+        <div class="panel"><h2>Battery Performance</h2><p class="muted">Starting/ending voltage, lowest observed voltage and voltage sag under load help track pack performance over time.</p>
+          <div class="info-callout">Battery current is <b>not</b> proven available from the SR48400. Motor amperage cannot be used to calculate accurate amp-hours or battery health percentage.</div>
+          <p class="muted">Repeat similar trips and compare sag at similar current and temperature to watch for deterioration. A resting voltage check and proper capacity test are still valuable.</p></div>
+      </div>
+    </section>
+
+    <!-- Battery diagnostics: independent of trip recording. -->
+    <section class="page" data-page="batteryhealth">
+      <header class="page-title"><span>▰</span><h1>Battery Health</h1></header>
+      <div class="panel battery-overview">
+        <div class="panel-heading"><h2>48V Flooded Lead-Acid Pack</h2><span class="tag" id="batLogging">WAITING FOR USB</span></div>
+        <div class="battery-hero-grid">
+          <div><span class="metric-kicker">LIVE PACK VOLTAGE</span><strong id="batLiveV">—</strong><small>V · controller reported</small></div>
+          <div><span class="metric-kicker">REMAINING CHARGE · EST.</span><strong id="batSoc">—</strong><small id="batConfidence">Needs a rested reading</small></div>
+        </div>
+        <div class="soc-bar"><div id="batSocFill"></div></div>
+        <p class="muted" id="batExplanation">A voltage reading taken after at least 2 hours without charging or driving gives a better charge estimate than voltage under load.</p>
+      </div>
+      <div class="battery-tiles">
+        <div class="battery-tile">Lowest recorded voltage<strong id="batMinV">—</strong></div>
+        <div class="battery-tile">Observed voltage swing<strong id="batSwing">—</strong></div>
+        <div class="battery-tile">Peak motor current<strong id="batPeakA">—</strong></div>
+        <div class="battery-tile">Logged intervals<strong id="batCount">0</strong></div>
+      </div>
+      <div class="panel">
+        <div class="panel-heading"><h2>Battery Performance Log</h2><button class="btn tiny" id="batRefresh">↻ Refresh</button></div>
+        <div class="segment-control battery-period"><button class="current" data-hours="24">24 hours</button><button data-hours="168">7 days</button><button data-hours="720">30 days</button></div>
+        <canvas id="batteryChart" width="600" height="300" aria-label="Logged pack voltage chart"></canvas>
+        <p class="muted" id="batHistoryNote">Battery samples are saved automatically while USB is connected, even without an active trip.</p>
+        <div class="info-callout">Voltage dips under acceleration can reveal sag, but motor output current is <b>not</b> battery current. Amp-hours, true battery capacity and exact miles remaining cannot be calculated from these readings.</div>
+      </div>
+      <div class="panel">
+        <h2>Record a Rested Voltage Check</h2>
+        <p class="muted">After the batteries sit for <b>at least 2 hours</b> without charging or driving, enter your measured total pack voltage. For best accuracy, check after a longer rest, away from recent charging surface charge.</p>
+        <label for="batRestVoltage">Total pack voltage (V)</label>
+        <div class="battery-entry"><input type="number" id="batRestVoltage" min="42" max="55" step="0.01" inputmode="decimal" placeholder="e.g. 49.20"><button class="btn primary" id="batSaveCheck">Save Check</button></div>
+        <p class="muted" id="batRestMessage">Estimates assume eight 6V flooded lead-acid batteries in series, near room temperature. Voltage estimates are approximate and cannot detect a weak individual battery.</p>
+        <div id="batCheckHistory" class="history-list"></div>
+      </div>
+    </section>
+
+    <!-- Separate setting & curves. No writes. -->
+    <section class="page" data-page="throttle">
+      <header class="page-title"><span>☷</span><h1>Throttle</h1></header>
+      <div class="segment-control" data-segment="throttle"><button class="current" data-sub="settings">Settings</button><button data-sub="curves">Curves</button><button data-sub="presets">Presets</button></div>
+      <div class="sub-panel active" data-subpanel="settings">
+        <div class="panel"><div class="panel-heading"><h2>Stored Controller Settings</h2><span class="tag">READ ONLY</span></div>
+          <p class="muted">Reads controller flash—not the current pedal input. Stop the cart before inspecting settings.</p>
+          <button id="readThrottleSettings" class="btn primary">↓ Read Stored Settings</button>
+          <div id="throttleSettingsContent" class="data-box">Connect the controller to read saved throttle settings.</div>
+        </div>
+        <div class="panel"><h2>Live Pedal</h2>
+          <div class="wide-number"><span id="throttleLive">—</span><small>Estimated percent</small></div>
+          <div class="throttle-track"><div id="throttleProgress2" class="throttle-fill"></div></div>
+          <p class="muted">The controller measures throttle in machine units (0–4095). Percentage is an estimated UI conversion.</p>
+        </div>
+      </div>
+      <div class="sub-panel" data-subpanel="curves">
+        <div class="panel"><div class="panel-heading"><h2>Stored Throttle Curves</h2><span class="tag">READ ONLY</span></div>
+          <button id="readThrottleCurves" class="btn primary">↓ Read Controller Curves</button>
+          <div class="curve-tabs" id="curveTabs"></div>
+          <canvas id="curveChart" width="600" height="340" aria-label="Stored throttle curve"></canvas>
+          <div id="curvePoints" class="data-box">Read the controller to see its saved curve points.</div>
+          <p class="muted">Flash addresses and percentages must be validated against the official Toolkit before changing controller settings.</p>
+        </div>
+      </div>
+      <div class="sub-panel" data-subpanel="presets">
+        <div class="panel"><div class="panel-heading"><h2>Throttle Profiles</h2><span class="tag">PREVIEW ONLY</span></div>
+          <div class="preset-list">
+            <div class="preset"><b>Stock / Original</b><small>Back up the controller's own current map first.</small></div>
+            <div class="preset"><b>Smooth Cruise</b><small>Gradual response with finer low-speed control.</small></div>
+            <div class="preset"><b>Sand &amp; Trail</b><small>Designed around gentle initial pedal response.</small></div>
+            <div class="preset"><b>Sport</b><small>Quicker response to pedal changes.</small></div>
+            <div class="preset"><b>Custom</b><small>Offline draft profiles can be saved locally.</small></div>
+          </div>
+          <label for="presetName">Save a local profile note</label>
+          <input id="presetName" placeholder="My throttle profile" maxlength="50">
+          <button class="btn outline" id="savePreset">Save Note Locally</button>
+          <div id="savedPresetList" class="saved-presets"></div>
+          <div class="danger-callout">Programming the motor controller is intentionally disabled in this release. A verified write protocol, backup, read-back, and stationary safety interlock are required first.</div>
+          <button class="btn disabled-button" disabled>↑ Upload Preset to Controller — LOCKED</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Fault diagnostics and manual raw reads. -->
+    <section class="page" data-page="diagnostics">
+      <header class="page-title"><span>⚠</span><h1>Diagnostics</h1></header>
+      <div class="panel"><div class="panel-heading"><h2>Current Faults</h2><span class="tag" id="faultBadge">UNAVAILABLE</span></div>
+        <div id="faultList" class="fault-list">Connect to display the 15 controller fault flags.</div>
+        <button class="btn outline" id="copyFaults">Copy Faults</button>
+      </div>
+      <div class="panel"><h2>Troubleshooting</h2>
+        <p class="muted">The SR controller can receive KSI indirectly through the pedal microswitch circuit. A key ON reading while the pedal is released may still be zero.</p>
+        <div class="sensor-mini"><span>USB connection</span><b id="diagUsb">Disconnected</b></div>
+        <div class="sensor-mini"><span>KSI voltage (reported)</span><b id="diagKsi">—</b></div>
+        <div class="sensor-mini"><span>Relay / solenoid state</span><b id="diagSolenoid">—</b></div>
+        <div class="sensor-mini"><span>Controller temperature</span><b id="diagTemp">—</b></div>
+      </div>
+      <div class="panel"><div class="panel-heading"><h2>Sensor Discovery</h2><span class="tag">READ ONLY</span></div>
+        <p class="muted">Park and secure the cart before testing. Captures 12 small, selected SRAM regions near known controller data. Unnamed values are NOT verified sensors. No configuration writes.</p>
+        <input id="discoveryLabel" maxlength="40" placeholder="Snapshot label: key off / key on / idle">
+        <div class="actions"><button class="btn primary" id="discoveryCapture">Capture</button><button class="btn outline" id="discoveryCompare">Compare Last Two</button><button class="btn outline" id="discoveryCopy">Copy JSON</button></div>
+        <p class="muted" id="discoveryStatus">Connect controller to capture. Last 12 snapshots are saved on this tablet.</p>
+        <pre id="discoveryOutput">No captures yet.</pre>
+      </div>
+      <div class="panel"><h2>Read-only Memory Inspector</h2>
+        <p class="muted">For troubleshooting only. Reads are limited to the controller's flash and SRAM windows.</p>
+        <div class="memory-inputs"><input id="memoryAddress" value="0x20004000" aria-label="Memory address"><input id="memoryLength" type="number" min="1" max="56" value="15" aria-label="Bytes"></div>
+        <button class="btn outline" id="memoryRead">↓ Read Bytes</button>
+        <pre id="memoryResult">No read requested.</pre>
+      </div>
+    </section>
+
+    <!-- Expanded telemetry data; never display stale fake values. -->
+    <section class="page" data-page="sensors">
+      <header class="page-title"><span>⌁</span><h1>Live Sensors</h1></header>
+      <div class="panel"><div class="panel-heading"><h2>SR48400 Data</h2><span class="tag" id="sensorStatus">NO CONNECTION</span></div>
+        <p class="muted">Manufacturer-defined fields are marked reported, unverified, or unavailable. Battery amperage is not motor amperage.</p>
+        <input type="search" id="sensorFilter" placeholder="Search all sensors, inputs, faults…" aria-label="Filter sensors">
+        <div class="sensor-list" id="sensorList">Connect to see live controller readings.</div>
+      </div>
+    </section>
+  </main>
+  <nav class="bottom-nav" aria-label="App pages">
+    <button class="nav-btn chosen" data-target="drive"><img src="img/ic_drive_active.png" alt=""><span>Drive</span></button>
+    <button class="nav-btn" data-target="trips"><img src="img/ic_trips_inactive.png" alt=""><span>Trips</span></button>
+    <button class="nav-btn" data-target="batteryhealth"><img src="img/ic_battery.png" alt=""><span>Battery</span></button>
+    <button class="nav-btn" data-target="throttle"><img src="img/ic_throttle_inactive.png" alt=""><span>Throttle</span></button>
+    <button class="nav-btn" data-target="diagnostics"><img src="img/ic_diagnostics_inactive.png" alt=""><span>Faults</span></button>
+    <button class="nav-btn" data-target="sensors"><img src="img/ic_sensors_inactive.png" alt=""><span>Sensors</span></button>
+  </nav>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
