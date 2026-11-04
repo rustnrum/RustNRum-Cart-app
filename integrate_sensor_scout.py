@@ -6,7 +6,7 @@ import os, re, sys, shutil, zipfile, tempfile
 from pathlib import Path
 
 HERE=Path(__file__).resolve().parent
-MARKER=HERE/'.rnr_sensor_scout_v04_integrated'
+MARKER=HERE/'.rnr_sensor_scout_v05_integrated'
 if MARKER.exists():
     print('RNR Sensor Scout: already integrated')
     sys.exit(0)
@@ -120,9 +120,53 @@ if patched is None:
         <category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>''',1)
 
+# Bind this scanner to the existing working Cart USB instance, not a new HID transport.
+# The original app's UsbController uses interrupt OUT 0x01 and IN 0x81 (64 bytes).
+# A separate SET_REPORT call failed -1 on this hardware; sharing the existing
+# connection is necessary to prevent duplicate interface claims and concurrent I/O.
+kt_main=HERE/'app/src/main/java/com/rustnrum/cart/MainActivity.kt'
+if not kt_main.is_file():
+    raise SystemExit('Expected Kotlin Cart MainActivity missing; refusing incomplete scanner integration')
+kt=kt_main.read_text()
+if 'scoutRead(address: Long, count: Int)' not in kt:
+    cls=re.search(r'class\s+MainActivity\s*:\s*Activity\s*\(\s*\)\s*\{',kt)
+    if not cls: raise SystemExit('Cannot identify original MainActivity class for shared USB access')
+    shared="""
+    companion object {
+        @Volatile private var scoutHost: MainActivity? = null
+
+        /** Read-only, serialized with Drive's existing UsbController + trip polling. */
+        @JvmStatic fun scoutConnected(): Boolean = scoutHost?.connected == true
+        @JvmStatic fun scoutRead(address: Long, count: Int): ByteArray {
+            val owner = scoutHost ?: throw IllegalStateException("Cart USB session unavailable")
+            val job = owner.io.submit<ByteArray> {
+                check(owner.connected) { "Connect Alltrax on Drive screen first" }
+                owner.usb.read(address, count)
+            }
+            return try {
+                job.get(6500L, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } catch (e: java.util.concurrent.ExecutionException) {
+                throw IllegalStateException("Alltrax USB read failed: ${e.cause?.message ?: e.message}",e.cause ?: e)
+            } catch (e: java.util.concurrent.TimeoutException) {
+                job.cancel(true)
+                throw IllegalStateException("Alltrax USB request timed out",e)
+            }
+        }
+    }
+"""
+    kt=kt[:cls.end()] + '\n' + shared + kt[cls.end():]
+    begin=re.search(r'super\.onCreate\s*\(\s*savedInstanceState\s*\)',kt)
+    if not begin:raise SystemExit('Missing onCreate for sensor host registration')
+    kt=kt[:begin.end()]+'\n        scoutHost = this'+kt[begin.end():]
+    cleanup='override fun onDestroy() {'
+    if cleanup not in kt: raise SystemExit('No onDestroy cleanup point')
+    kt=kt.replace(cleanup,cleanup+'\n        if (scoutHost === this) scoutHost = null',1)
+    kt_main.write_text(kt)
+    print('RNR Sensor Scout: scanner now shares Drive USB connection and serialized worker')
+
 manifest.write_text(s)
 # Guardrail: core Cart resources and app build config must have been preserved.
 assert (HERE/'app/build.gradle.kts').is_file()
 assert (HERE/'app/src/main/AndroidManifest.xml').is_file()
-MARKER.write_text('v0.4 Sensors integration complete; source from original v0.3 ZIP\n')
+MARKER.write_text('v0.5 Sensors transport fix: shared working Cart USB session\n')
 print('RNR Sensor Scout: merged into original app; no controller configuration writes')

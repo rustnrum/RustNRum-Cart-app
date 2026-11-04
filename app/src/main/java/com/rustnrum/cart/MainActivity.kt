@@ -33,6 +33,29 @@ import java.util.concurrent.Executors
 import kotlin.math.max
 
 class MainActivity : Activity() {
+
+    companion object {
+        @Volatile private var scoutHost: MainActivity? = null
+
+        /** Read-only, serialized with Drive's existing UsbController + trip polling. */
+        @JvmStatic fun scoutConnected(): Boolean = scoutHost?.connected == true
+        @JvmStatic fun scoutRead(address: Long, count: Int): ByteArray {
+            val owner = scoutHost ?: throw IllegalStateException("Cart USB session unavailable")
+            val job = owner.io.submit<ByteArray> {
+                check(owner.connected) { "Connect Alltrax on Drive screen first" }
+                owner.usb.read(address, count)
+            }
+            return try {
+                job.get(6500L, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } catch (e: java.util.concurrent.ExecutionException) {
+                throw IllegalStateException("Alltrax USB read failed: ${e.cause?.message ?: e.message}",e.cause ?: e)
+            } catch (e: java.util.concurrent.TimeoutException) {
+                job.cancel(true)
+                throw IllegalStateException("Alltrax USB request timed out",e)
+            }
+        }
+    }
+
     private lateinit var web: WebView
     private lateinit var usbManager: UsbManager
     private lateinit var usb: UsbController
@@ -160,6 +183,7 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        scoutHost = this
         
 
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
@@ -457,6 +481,7 @@ window.statusBarColor = Color.rgb(8,14,18)
     }
 
     override fun onDestroy() {
+        if (scoutHost === this) scoutHost = null
         main.removeCallbacks(pollTask)
         if (locationActive) locationManager.removeUpdates(locationListener)
         try { unregisterReceiver(receiver) } catch (_:Exception) {}

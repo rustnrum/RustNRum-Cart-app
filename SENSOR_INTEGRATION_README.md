@@ -1,11 +1,30 @@
-# RNR Cart App v0.4.0 · Sensors integrated
+# RNR Cart App v0.5.0 · Sensor Scout USB repair
 
-**This is an upgrade to the existing Cart app, not a separate scanner APK.**
+This upgrades the **existing** RNR Cart app with a scanner that shares the same
+working USB controller, interrupt IN+OUT endpoints and single serial executor
+as the Drive/trip interface. It does not claim a second USB interface or send
+HID SET_REPORT control transfers. No controller configuration writes are made.
 
-Upload the ZIP itself (do not unzip) at the root of the existing GitHub repository, then click Commit Changes. Existing `.github/workflows/IMPORT.yml` finds `RustNRum-Cart-app-Android-v0.4.0-source.zip`, imports it, and runs the Gradle APK build. During the first Gradle invocation, the included bootstrap loads your already-committed original `RustNRum-Cart-app-Android-v0.3.0-source.zip` and adds read-only Sensor Scout within that app. The original drive screens, trips, images and settings remain intact. It creates an in-app Sensors shortcut if the main Activity matches standard Android patterns, otherwise a second Sensors launcher icon from the same APK.
+## Build / upload
+Upload `RustNRum-Cart-app-Android-v0.5.0-source.zip` (whole ZIP, do not extract)
+to the existing GitHub repository root, then Commit. The repository's existing
+`IMPORT.yml` workflow builds the APK. The original `RustNRum-Cart-app-Android-v0.3.0-source.zip`
+must remain in the repository root (the importer uses it as the complete base).
 
-**Prerequisite:** Leave `RustNRum-Cart-app-Android-v0.3.0-source.zip` in the repository root. Its content supplies the full original app, which is not repeated in this compact upgrade bundle.
+## Operation
+Connect to the controller in the main **Drive** screen, then tap **Sensors**
+and **Scan known sensors**. Sensor Scout uses that same active session. Do not
+unplug or change anything on the cart. Results are labeled plausible, invalid,
+raw/unverified or unavailable and may be copied as JSON.
 
-**Checks:** The bootstrap intentionally fails if the original ZIP isn't there or its app structure is wrong, rather than quietly publishing a standalone scanner.
+## Confirmed original v0.4.0 failure
+All 10 blocks failed at `controlTransfer(... HID SET_REPORT ...)` with -1,
+because the controller's verified transport instead uses a 64-byte HID interrupt
+OUT endpoint and interrupt IN endpoint. This package routes scanner reads
+through the existing `UsbController.read()` on the app's single I/O executor.
 
-No programming, motor, or flash commands are sent by the diagnostic. Unknown fields are labeled unverified; a successful USB packet alone doesn't prove engineering calibration.
+## Scope / limitations
+Build-tested by the established project GitHub Actions workflow only after
+upload. Here synthetic integration and static protocol checks pass, but no
+on-cart hardware test has been performed. The scanner cannot infer battery AH
+from motor current, and some values remain uncalibrated/unverified.
