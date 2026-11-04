@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'RustNRum-Cart-app-Android-*-source.zip'
+      - '.github/workflows/IMPORT.yml'
   workflow_dispatch:
 
 permissions:
@@ -23,25 +24,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           ZIP=$(find . -maxdepth 1 -type f \
             -name 'RustNRum-Cart-app-Android-*-source.zip' \
             -printf '%f\n' | sort -V | tail -n 1)
-
           test -n "$ZIP"
           unzip -tq "$ZIP"
-
           mkdir -p "$RUNNER_TEMP/cart-import"
           unzip -q "$ZIP" -d "$RUNNER_TEMP/cart-import"
-
           SOURCE="$RUNNER_TEMP/cart-import/RustNRum-Cart-app"
-
           test -f "$SOURCE/settings.gradle.kts"
           test -f "$SOURCE/app/build.gradle.kts"
           test -f "$SOURCE/app/src/main/AndroidManifest.xml"
 
-          rsync -a "$SOURCE/" "$GITHUB_WORKSPACE/"
+          # Ubuntu hosted runners already include Android SDK command-line tools.
+          # Remove the legacy action from the imported follow-up workflow.
+          if [ -f "$SOURCE/.github/workflows/android.yml" ]; then
+            sed -i '/^      - name: Set up Android SDK$/,+1d' "$SOURCE/.github/workflows/android.yml"
+          fi
 
+          rsync -a "$SOURCE/" "$GITHUB_WORKSPACE/"
           echo "SOURCE_ZIP=$ZIP" >> "$GITHUB_ENV"
 
       - name: Install Java
@@ -50,11 +51,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
-
-      - name: Install Android tools
-        run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          sdkmanager --version
+          sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
